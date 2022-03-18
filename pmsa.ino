@@ -26,11 +26,7 @@ IPAddress gateway(192, 168, 0, 1);
 #include <NTPClient.h>
 
 FtpServer ftpSrv; 
-//int Bo_STAR=16;
-//int estadoBo_star;
-//int sum;
 const int numReadings=10;
-int readings[numReadings];
 int inde=0;//indice actual
 int total_PM1=0;//total
 int total_PM25=0;
@@ -101,7 +97,6 @@ Adafruit_BME680 bme; // I2C
 const int RXPin = 2, TXPin = 0;
 SoftwareSerial neo6m(RXPin, TXPin);///software serial GPS
 const int CS = D8; // Para el NodeMcu
-String mensaje="Prueba1";
 int referencia=0;
 String cadena="";
 ///varables sensor Pmsa
@@ -120,6 +115,7 @@ String GAS_;
 String FECHA_;
 String ID;
 WiFiClient client;
+
 File myFile;
 TinyGPSPlus gps;
 Scheduler runner;
@@ -250,7 +246,7 @@ void ftp_datos(){
 
     if (WiFi.status() ==WL_CONNECTED){
         bool useStaticIP = false;
-        WiFi.config(ip, gateway, subnet);
+        //WiFi.config(ip, gateway, subnet);
         ftpSrv.handleFTP();
     
              //PMSA.enable();           //me.disable();
@@ -612,95 +608,50 @@ if(SD.exists(nom_documento)){
 
 
 void enviar_datos(){
-
-
-if (WiFi.status() ==WL_CONNECTED){
-    HTTPClient http; //Creacion de objeto http
-    String datos_a_enviar = "id="+ String(id)+"&pm1=" + String(PM1) + "&pm2_5=" + String(PM2_5)  +  "&pm10=" + String(PM10) + "&temperatura="+ String(temperatura)+"&humedad="+String(humedad)+"&presion="+String(presion)+"&gas="+String(gas) +"&longitud=" + String(gps.location.lng(),7) + "&latitud=" + String(gps.location.lat(),7)+"&anio="+String(anio)+"&mes="+String(Mes)+"&dia="+String(Dia)+"&hora="+String(hora)+"&minuto="+String(minuto);
-//http://esp8266p.000webhostapp.com/EspPost.php/pm1=55&pm2_5=80&pm10=90&longitud=19.81&latitud=-18.55
-    Serial.println(datos_a_enviar);
-
-    String hostname="http://esp8266p.000webhostapp.com/EspPost.php";
-    Serial.println(hostname);
-    if(client.connect(hostname, 80)) {
-      Serial.println("Connected to server");
-    } else {
-      Serial.println("connection failed");
-     client.println("POST ?" + datos_a_enviar + " HTTP/1.1");
-     client.println("Host: " + hostname);
-     client.println("Connection: close");
-     client.println(); // end HTTP header
-while(client.available())
-{
-  // read an incoming byte from the server and print them to serial monitor:
-  char c = client.read();
-  Serial.println("respuesta nueva:");
-  Serial.print(c);
-}
-
-if(!client.connected())
-{
-  // if the server's disconnected, stop the client:
-  Serial.println("disconnected");
-  client.stop();
-}
-
-      // send HTTP body
-      client.println(datos_a_enviar);
-}
+  HTTPClient http; //Creacion de objeto http
+  String datos_a_enviar = "id="+ String(id)+"&pm1=" + String(PM1) + "&pm2_5=" + String(PM2_5)  +  "&pm10=" + String(PM10) + "&temperatura="+ String(temperatura)+"&humedad="+String(humedad)+"&presion="+String(presion)+"&gas="+String(gas) +"&longitud=" + String(gps.location.lng(),7) + "&latitud=" + String(gps.location.lat(),7)+"&anio="+String(anio)+"&mes="+String(Mes)+"&dia="+String(Dia)+"&hora="+String(hora)+"&minuto="+String(minuto);
+  Serial.println(datos_a_enviar);
+  if (WiFi.status() ==WL_CONNECTED){
+    //client.println(datos_a_enviar);
     http.begin(client,"http://esp8266p.000webhostapp.com/EspPost.php");
-    //http.begin(client,"http://esp8266p.000webhostapp.com/EspPost.php");
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");//texto plano
-
-     int codigo_respuesta = http.POST(datos_a_enviar);
-     Serial.print("respuesta:");
-     Serial.println(codigo_respuesta);
-
-     if (codigo_respuesta>0){
+    int codigo_respuesta = http.POST(datos_a_enviar);
+    if (codigo_respuesta>0){
       Serial.println("codigo HTTP: "+ String(codigo_respuesta));
-        if(codigo_respuesta ==200){
-           String cuerpo_respuesta = http.getString();
-         // delay(60000); //espera 60s
-          }
-      } else{
+      if(codigo_respuesta ==200){
+        String cuerpo_respuesta = http.getString();
+        Serial.println(cuerpo_respuesta);
         }
-        Serial.println("No hay conexión con la Base de datos");
-
-        http.end();
-     
-    } else{
-       Serial.println("Error en la conexion WIFI");
       }
-      
-
-
+      else{
+        Serial.println("No hay conexión con la Base de datos");
+      }
+    http.end();
+  }
+  else{
+    Serial.println("Error en la conexion WIFI");
+  }
 }
-
 
 void RTC(){
-   HoraFecha=rtc.now();
+  HoraFecha=rtc.now();
   segundo=HoraFecha.second();
   minuto=HoraFecha.minute();
   hora= HoraFecha.hour();
   dia=HoraFecha.day();
   mes=HoraFecha.month();
   anio=HoraFecha.year();
-  
-  
 }
 void promedio(){
-  
-total_PM1+=data.pm10_env;
-total_PM25+=data.pm25_env;
-total_PM10+=data.pm100_env;
-total_temperatura+=bme.temperature;
-total_presion+=(bme.pressure/100);
-total_humedad+=bme.humidity;
-total_gas+=(bme.gas_resistance / 1000.0);
-inde++;
-
-
-   if (inde>=numReadings){
+  total_PM1+=data.pm10_env;
+  total_PM25+=data.pm25_env;
+  total_PM10+=data.pm100_env;
+  total_temperatura+=bme.temperature;
+  total_presion+=(bme.pressure/100);
+  total_humedad+=bme.humidity;
+  total_gas+=(bme.gas_resistance / 1000.0);
+  inde++;
+  if (inde>=numReadings){
 inde=0;
 total_PM1=trunc(total_PM1/numReadings);
 total_PM25=trunc(total_PM25/numReadings);
@@ -709,23 +660,21 @@ total_temperatura=trunc(total_temperatura/numReadings);
 total_humedad=trunc(total_humedad/numReadings);
 total_presion=trunc(total_presion/numReadings);
 total_gas=trunc(total_gas/numReadings);
-//pru:
-Serial.println("Promedio:");
+Serial.print("Promedio: ");
 Serial.print("total_PM1: ");
-Serial.println(total_PM1);
-Serial.print("total_PM25:");
-Serial.println(total_PM25);
-Serial.print("total_PM10:");
-Serial.println(total_PM10);
-Serial.print("total temperatura:");
-Serial.println(total_temperatura);
-Serial.print("total HR:");
-Serial.println(total_humedad);
-Serial.print("total P:");
-Serial.println(total_presion);
-Serial.print("total gas:");
+Serial.print(total_PM1);
+Serial.print(" total_PM25:");
+Serial.print(total_PM25);
+Serial.print(" total_PM10:");
+Serial.print(total_PM10);
+Serial.print(" total temperatura:");
+Serial.print(total_temperatura);
+Serial.print(" total HR:");
+Serial.print(total_humedad);
+Serial.print(" total P:");
+Serial.print(total_presion);
+Serial.print(" total gas:");
 Serial.println(total_gas);
-Serial.println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
 PM1=total_PM1;
 PM2_5=total_PM25;
 PM10=total_PM10;
@@ -740,7 +689,6 @@ if(y==0){
   minuto_anterior=minuto;
   y=1;
 }
-Serial.print(minuto);
 if(minuto!=minuto_anterior){
   minuto_anterior=minuto;
 
