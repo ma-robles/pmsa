@@ -8,9 +8,6 @@
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <SoftwareSerial.h>
-IPAddress ip(192, 168, 0, 200);
-IPAddress subnet(255, 255, 255, 0);
-IPAddress gateway(192, 168, 0, 1);
 #include <TinyGPS++.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -20,8 +17,8 @@ IPAddress gateway(192, 168, 0, 1);
 #define _TASK_PRIORITY
 #include <TaskScheduler.h>
 #include "ESP8266FtpServer.h"
-#include <Adafruit_Sensor.h>
-#include "Adafruit_BME680.h"
+//#include <Adafruit_Sensor.h>
+#include "Adafruit_BME280.h"
 #include "RTClib.h"
 #include <NTPClient.h>
 
@@ -34,11 +31,10 @@ float total_temperatura=0;
 float total_humedad=0;
 float total_presion=0;
 float total_gas=0;
-int inputPin=0;
 
 /////////////////////////////////////
 RTC_DS1307 rtc;
-int SQpin= 2;
+//int SQpin= 2;
 int minuto_anterior;
 int minuto;
 int segundo,hora,dia,mes;
@@ -59,10 +55,7 @@ void conexion_Internet();
 void no_conexion();
 void datos_PMSA();
 void enviar_datos();
- int estado_boton=1;
-int estado_menu=0;
  int id=1;
- int y=0;
 void promedio();
 String nom_documento;
 String fecha;
@@ -74,7 +67,7 @@ Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
  PM25_AQI_Data data;
 //////////////definir sensor temperatura
 #define SEALEVELPRESSURE_HPA (1013.25)
-Adafruit_BME680 bme; // I2C
+Adafruit_BME280 bme; // I2C
 const int RXPin = 16, TXPin = 0;
 //SoftwareSerial neo6m(RXPin, TXPin);///software serial GPS
 const int CS = D8; // Para el NodeMcu
@@ -121,6 +114,8 @@ struct status{
 struct status stat_all;
 uint8_t* structPtr = (uint8_t*) &stat_all;
 
+const int button_pin = 2;
+
 void setup() {
     Serial.begin(115200);
     Serial.println();
@@ -143,23 +138,18 @@ void setup() {
     if (! stat_all.pm){
         Serial.println("No se pudo encontrar sensor 2.5 sensor!");
         }
-    Serial.println("encontrado!");
+    else Serial.println("encontrado!");
     Serial.print("Sensor BME...");
-    stat_all.pth = bme.begin();
+    stat_all.pth = bme.begin(BME280_ADDRESS_ALTERNATE);
+    //stat_all.pth = bme.begin(BME280_ADDRESS);
     if (!stat_all.pth) {
         Serial.println("No se pudo encontrar BME680");
     }
-    Serial.print("encontrado!");
-    delay(1000);
-    bme.setTemperatureOversampling(BME680_OS_8X);
-    bme.setHumidityOversampling(BME680_OS_2X);
-    bme.setPressureOversampling(BME680_OS_4X);
-    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    bme.setGasHeater(320, 150);
-    Serial.println("/inicializado.");
+    else Serial.print("encontrado!");
     //rtc.writeSqwPinMode( DS1307_OFF );
     //pinMode(SQpin, INPUT);
     Serial.println("input");
+    pinMode(button_pin, INPUT);
     Serial.println("begin");
     stat_all.rtc=rtc.begin();
     //WiFi
@@ -168,7 +158,7 @@ void setup() {
     if(!wifiManager.autoConnect("PMSA", "12345678")){ 
         ESP.restart();
     }
-    Serial.println("....conectado!");
+    else Serial.println("conectado!");
     for (byte i=0; i< sizeof(stat_all); i++){
         Serial.println(*structPtr++);
     }
@@ -195,12 +185,12 @@ void setup() {
     Serial.print("hora: ");
     Serial.println(HoraFecha.timestamp());
     PMSA.enable();
-    //attachInterrupt(digitalPinToInterrupt(SQpin), inter0 , RISING);
+    attachInterrupt(digitalPinToInterrupt(button_pin), inter0 , FALLING);
 }
 
 void loop() {
     runner.execute();
-    RTC();                    
+    //RTC();                    
     ftp_datos();
 } 
 ICACHE_RAM_ATTR void inter0(){
@@ -219,10 +209,6 @@ void datos_PMSA(){
     if (! aqi.read(&data)) {
         Serial.println("no se pudo leer la calidad del aire");
         //delay(500);  // try again in a bit!
-        return;
-    }
-    if (! bme.performReading()) {
-        Serial.println("no se pudo leer Temperatura y humedad :(");
         return;
     }
     promedio();
@@ -567,16 +553,9 @@ void promedio(){
     total_PM1+=data.pm10_env;
     total_PM25+=data.pm25_env;
     total_PM10+=data.pm100_env;
-    total_temperatura+=bme.temperature;
-    total_presion+=(bme.pressure/100);
-    total_humedad+=bme.humidity;
-    total_gas+=(bme.gas_resistance / 1000.0);
-    Serial.print(data.pm10_env);
-    Serial.print(' ');
-    Serial.print(bme.temperature);
-    Serial.print(' ');
-    Serial.print(bme.humidity);
-    Serial.print(' ');
+    total_temperatura+=bme.readTemperature();
+    total_presion+=(bme.readPressure()/100.0);
+    total_humedad+=bme.readHumidity();
     ndata++;
     RTC();
     if(minuto!=minuto_anterior){
