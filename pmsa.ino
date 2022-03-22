@@ -55,7 +55,8 @@ void conexion_Internet();
 void no_conexion();
 void datos_PMSA();
 void enviar_datos();
- int id=1;
+char const *id="1";
+char const *APname=strcat("MPBU_", id);
 void promedio();
 String nom_documento;
 String fecha;
@@ -116,7 +117,14 @@ uint8_t* structPtr = (uint8_t*) &stat_all;
 
 const int button_pin = 2;
 
+boolean wifi_setup = false;
+
+WiFiManager wm;
+
 void setup() {
+    std::vector<const char *> menu = {"wifi","exit"};
+    wm.setMenu(menu);
+
     Serial.begin(115200);
     Serial.println();
     //neo6m.begin(9600);//serial gps
@@ -136,14 +144,14 @@ void setup() {
     delay(1000);
     stat_all.pm = aqi.begin_I2C();
     if (! stat_all.pm){
-        Serial.println("No se pudo encontrar sensor 2.5 sensor!");
+        Serial.println("No se pudo encontrar sensor PM!");
         }
     else Serial.println("encontrado!");
     Serial.print("Sensor BME...");
     stat_all.pth = bme.begin(BME280_ADDRESS_ALTERNATE);
     //stat_all.pth = bme.begin(BME280_ADDRESS);
     if (!stat_all.pth) {
-        Serial.println("No se pudo encontrar BME680");
+        Serial.println("No se pudo encontrar BME");
     }
     else Serial.print("encontrado!");
     //rtc.writeSqwPinMode( DS1307_OFF );
@@ -153,12 +161,11 @@ void setup() {
     Serial.println("begin");
     stat_all.rtc=rtc.begin();
     //WiFi
-    Serial.println("Activando WiFi...");
-    WiFiManager wifiManager;
-    if(!wifiManager.autoConnect("PMSA", "12345678")){ 
-        ESP.restart();
-    }
-    else Serial.println("conectado!");
+    Serial.print("Activando WiFi...");
+    WiFi.mode(WIFI_STA);
+    //wm.setConfigPortalBlocking(false);
+    if (wm.autoConnect(APname, "mpbuCfg2022")) Serial.println("OK");
+    else Serial.println("Falló");
     for (byte i=0; i< sizeof(stat_all); i++){
         Serial.println(*structPtr++);
     }
@@ -171,8 +178,9 @@ void setup() {
     Serial.println(formattedTime);  
     time_t epochTime = timeClient.getEpochTime();
     struct tm *ptm = gmtime ((time_t *)&epochTime);
+    Serial.println(ptm->tm_year);
     Serial.print("Sincronización de hora ");
-    if (ptm->tm_year>100){
+    if (ptm->tm_year>100 && ptm->tm_year<199){
         Serial.println("correcta");
         rtc.adjust(DateTime(ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec));
     }
@@ -189,12 +197,31 @@ void setup() {
 }
 
 void loop() {
+    if (wifi_setup){
+        config_wf(60);
+        wifi_setup = false;
+        interrupts();
+    }
     runner.execute();
-    //RTC();                    
     ftp_datos();
 } 
+
+void config_wf(int timeout){
+
+    wm.setConfigPortalTimeout(timeout);
+    //wm.setConfigPortalBlocking(false);
+    if (!wm.startConfigPortal(APname, "mpbuCfg2022")){
+        Serial.println("Falló la configuración WiFi");
+    }
+    else Serial.println("Configuración WiFi exitosa");
+    //wm.process();
+}
+
 ICACHE_RAM_ATTR void inter0(){
+    noInterrupts();
     Serial.println("Inter!!!");
+    wifi_setup = true;
+    
 }
 
 void ftp_datos(){
@@ -515,13 +542,31 @@ void leerSD()
 
 void enviar_datos(){
     HTTPClient http; //Creacion de objeto http
-    String datos_a_enviar = "id="+ String(id)+"&pm1=" + String(PM1) + "&pm2_5=" + String(PM2_5)  +  "&pm10=" + String(PM10) + "&temperatura="+ String(temperatura)+"&humedad="+String(humedad)+"&presion="+String(presion)+"&gas="+String(gas) +"&longitud=" + String(gps.location.lng(),7) + "&latitud=" + String(gps.location.lat(),7)+"&anio="+String(anio)+"&mes="+String(Mes)+"&dia="+String(Dia)+"&hora="+String(hora)+"&minuto="+String(minuto);
-    Serial.println(datos_a_enviar);
+    String req= "id="+ String(id)+
+        "&pm1=" + String(PM1) +
+        "&pm2_5=" + String(PM2_5) +
+        "&pm10=" + String(PM10) +
+        "&temperatura="+ String(temperatura)+
+        "&humedad="+String(humedad)+
+        "&presion="+String(presion)+
+        "&gas="+String(gas) +
+        "&longitud=" + String(gps.location.lng(),7) +
+        "&latitud=" + String(gps.location.lat(),7)+
+        "&anio="+String(anio)+
+        "&mes="+String(Mes)+
+        "&dia="+String(Dia)+
+        "&hora="+String(hora)+
+        "&minuto="+String(minuto);
     if (WiFi.status() ==WL_CONNECTED){
-        //client.println(datos_a_enviar);
+        IPAddress IP_local = WiFi.localIP();
+        req += "&ip1=" + String(IP_local[0]) +
+            "&ip2=" + String(IP_local[1]) +
+            "&ip3=" + String(IP_local[2]) +
+            "&ip4=" + String(IP_local[3]); 
+        Serial.println(req);
         http.begin(client,"http://esp8266p.000webhostapp.com/EspPost.php");
         http.addHeader("Content-Type", "application/x-www-form-urlencoded");//texto plano
-        int codigo_respuesta = http.POST(datos_a_enviar);
+        int codigo_respuesta = http.POST(req);
         if (codigo_respuesta>0){
             Serial.println("codigo HTTP: "+ String(codigo_respuesta));
             if(codigo_respuesta ==200){
@@ -558,7 +603,9 @@ void promedio(){
     total_humedad+=bme.readHumidity();
     ndata++;
     RTC();
+    Serial.print('*');
     if(minuto!=minuto_anterior){
+        Serial.println();
         Serial.println(ndata);
         minuto_anterior=minuto;
         PM1=total_PM1/ndata;
